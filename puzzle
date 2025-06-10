@@ -1,0 +1,93 @@
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+from sympy import symbols, Eq, solve, simplify
+import random
+
+# === Step 1: Set up the cube structure ===
+positions = {
+    'A': (0, 0, 0), 'B': (1, 0, 0), 'C': (1, 1, 0), 'D': (0, 1, 0),
+    'E': (0, 0, 1), 'F': (1, 0, 1), 'G': (1, 1, 1), 'H': (0, 1, 1)
+}
+edges = [
+    ('A', 'B'), ('B', 'C'), ('C', 'D'), ('D', 'A'),
+    ('E', 'F'), ('F', 'G'), ('G', 'H'), ('H', 'E'),
+    ('A', 'E'), ('B', 'F'), ('C', 'G'), ('D', 'H')
+]
+
+# === Step 2: Generate resistor values ===
+np.random.seed()
+resistor_values = {}
+all_edges = [frozenset(e) for e in edges]
+hidden_edge = random.choice(all_edges)
+for edge in edges:
+    key = frozenset(edge)
+    if key == hidden_edge:
+        resistor_values[key] = "?"
+    else:
+        resistor_values[key] = np.random.randint(1, 10)
+
+# === Step 3: Visualize the cube ===
+def draw_cube(resistor_values, hidden_edge):
+    G = nx.Graph()
+    G.add_edges_from(edges)
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    for (u, v) in G.edges():
+        x = [positions[u][0], positions[v][0]]
+        y = [positions[u][1], positions[v][1]]
+        z = [positions[u][2], positions[v][2]]
+        ax.plot(x, y, z, 'b', linewidth=2)
+        mid = [(x[0]+x[1])/2, (y[0]+y[1])/2, (z[0]+z[1])/2]
+        label = resistor_values[frozenset((u, v))]
+        ax.text(mid[0], mid[1], mid[2], f"{label}Ω", color='blue', fontsize=10)
+    for node, (x, y, z) in positions.items():
+        ax.scatter(x, y, z, color='red', s=50)
+        ax.text(x, y, z, node, fontsize=12)
+    ax.set_title("3D Resistor Cube Puzzle - Guess the Missing Resistor")
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    plt.tight_layout()
+    plt.show()
+
+draw_cube(resistor_values, hidden_edge)
+
+# === Step 4: Student inputs a guess ===
+hidden_nodes = list(hidden_edge)
+guess = float(input(f"Guess the resistor value between {hidden_nodes[0]} and {hidden_nodes[1]}: "))
+resistor_values[hidden_edge] = guess
+
+# === Step 5: Kirchhoff Analysis ===
+VA, VB, VC, VD, VE, VF, VG, VH = symbols('VA VB VC VD VE VF VG VH')
+voltages = {'A': VA, 'B': VB, 'C': VC, 'D': VD, 'E': VE, 'F': VF, 'G': VG, 'H': VH}
+known_voltages = {'A': 0, 'G': 10}
+substitutions = {voltages[n]: v for n, v in known_voltages.items()}
+equations = []
+for edge in edges:
+    u, v = edge
+    R = resistor_values[frozenset(edge)]
+    current = (voltages[u] - voltages[v]) / R
+    equations.append((u, v, current))
+node_currents = {node: 0 for node in voltages}
+for u, v, current in equations:
+    node_currents[u] += current
+    node_currents[v] -= current
+kcl_eqs = []
+for node, expr in node_currents.items():
+    if node not in known_voltages:
+        kcl_eqs.append(Eq(simplify(expr.subs(substitutions)), 0))
+unknowns = [v for k, v in voltages.items() if k not in known_voltages]
+solution = solve(kcl_eqs, unknowns)
+
+# === Step 6: Result ===
+if solution:
+    print("\n✅ Valid solution! Your guess satisfies Kirchhoff's Laws.")
+    for k, v in sorted(solution.items()):
+        print(f"{k}: {round(float(v), 3)} V")
+else:
+    print("\n❌ Invalid solution. Your guess does not satisfy Kirchhoff's Laws.")
+
+# === Step 7: Reveal correct value ===
+actual_value = np.random.randint(1, 10)
+print(f"\n✅ The correct resistor value between {hidden_nodes[0]} and {hidden_nodes[1]} was: {actual_value} Ω")
